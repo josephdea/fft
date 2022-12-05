@@ -333,13 +333,13 @@ class Conv(Module):
 
 
 class FFT1D(Module):
-    def forward(self, x: Tensor) -> Tensor:
-        return ops.forward_fourier_1d(x)
+    def forward(self, x):
+        return ops.forward_fourier_real_1d(x)
 
 
 class IFFT1D(Module):
-    def forward(self, x: Tensor) -> Tensor:
-        return ops.backward_fourier_1d(x)
+    def forward(self, x):
+        return ops.backward_fourier_real_1d(x)
 
 
 class RNNCell(Module):

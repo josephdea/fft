@@ -401,7 +401,7 @@ void Matmul(const CudaArray& a, const CudaArray& b, CudaArray* out, uint32_t M, 
   /// END YOUR SOLUTION
 }
 
-__global__ void ForwardFourier1DKernel(const scalar_t* a, scalar_t* out_real, scalar_t* out_imag,
+__global__ void ForwardFourier1DKernel(const scalar_t* a_real, const scalar_t* a_imag, scalar_t* out_real, scalar_t* out_imag,
                                        uint32_t n) {
   /*
   size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -430,7 +430,7 @@ __global__ void ForwardFourier1DKernel(const scalar_t* a, scalar_t* out_real, sc
     double imag = 0.0;
 
     for (size_t j = 0; j < n; ++j) {
-      auto a_j = make_cuDoubleComplex(a[j], 0.0);
+      auto a_j = make_cuDoubleComplex(a_real[j], (a_imag != nullptr) ? a_imag[j] : 0.0);
       double theta = -2.0 * j * gid / n;
       sincospi(theta, &(c.y), &(c.x));
       c = cuCmul(c, a_j);
@@ -443,13 +443,19 @@ __global__ void ForwardFourier1DKernel(const scalar_t* a, scalar_t* out_real, sc
   }
 }
 
-void ForwardFourier1D(const CudaArray& a, CudaArray* out_real, CudaArray* out_imag, uint32_t n) {
+void ForwardFourierReal1D(const CudaArray& a, CudaArray* out_real, CudaArray* out_imag, uint32_t n) {
   // CudaDims dim = CudaOneDim(n * n);
   CudaDims dim = CudaOneDim(n);
-  ForwardFourier1DKernel<<<dim.grid, dim.block>>>(a.ptr, out_real->ptr, out_imag->ptr, n);
+  ForwardFourier1DKernel<<<dim.grid, dim.block>>>(a.ptr, nullptr, out_real->ptr, out_imag->ptr, n);
 }
 
-__global__ void BackwardFourier1DKernel(const scalar_t* a, scalar_t* out_real, scalar_t* out_imag,
+void ForwardFourierComplex1D(const CudaArray& a_real, const CudaArray& a_imag, CudaArray* out_real, CudaArray* out_imag, uint32_t n) {
+  // CudaDims dim = CudaOneDim(n * n);
+  CudaDims dim = CudaOneDim(n);
+  ForwardFourier1DKernel<<<dim.grid, dim.block>>>(a_real.ptr, a_imag.ptr, out_real->ptr, out_imag->ptr, n);
+}
+
+__global__ void BackwardFourier1DKernel(const scalar_t* a_real, const scalar_t* a_imag, scalar_t* out_real, scalar_t* out_imag,
                                         uint32_t n) {
   size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -459,7 +465,7 @@ __global__ void BackwardFourier1DKernel(const scalar_t* a, scalar_t* out_real, s
     double imag = 0.0;
 
     for (size_t j = 0; j < n; ++j) {
-      auto a_j = make_cuDoubleComplex(a[j], 0.0);
+      auto a_j = make_cuDoubleComplex(a_real[j], (a_imag != nullptr) ? a_imag[j] : 0.0);
       double theta = 2.0 * j * gid / n;
       sincospi(theta, &(c.y), &(c.x));
       c = cuCmul(c, a_j);
@@ -472,9 +478,14 @@ __global__ void BackwardFourier1DKernel(const scalar_t* a, scalar_t* out_real, s
   }
 }
 
-void BackwardFourier1D(const CudaArray& a, CudaArray* out_real, CudaArray* out_imag, uint32_t n) {
+void BackwardFourierReal1D(const CudaArray& a, CudaArray* out_real, CudaArray* out_imag, uint32_t n) {
   CudaDims dim = CudaOneDim(n);
-  BackwardFourier1DKernel<<<dim.grid, dim.block>>>(a.ptr, out_real->ptr, out_imag->ptr, n);
+  BackwardFourier1DKernel<<<dim.grid, dim.block>>>(a.ptr, nullptr, out_real->ptr, out_imag->ptr, n);
+}
+
+void BackwardFourierComplex1D(const CudaArray& a_real, const CudaArray& a_imag, CudaArray* out_real, CudaArray* out_imag, uint32_t n) {
+  CudaDims dim = CudaOneDim(n);
+  BackwardFourier1DKernel<<<dim.grid, dim.block>>>(a_real.ptr, a_imag.ptr, out_real->ptr, out_imag->ptr, n);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -603,10 +614,14 @@ PYBIND11_MODULE(ndarray_backend_cuda, m) {
 
   m.def("matmul", Matmul);
 
-  m.def("naive_forward_fourier_1d", ForwardFourier1D);
-  m.def("naive_backward_fourier_1d", BackwardFourier1D);
-  m.def("fast_forward_fourier_1d", ForwardFourier1D);    // no need to use FFT
-  m.def("fast_backward_fourier_1d", BackwardFourier1D);  // no need to use FFT
+  m.def("naive_forward_fourier_real_1d", ForwardFourierReal1D);
+  m.def("naive_forward_fourier_complex_1d", ForwardFourierComplex1D);
+  m.def("naive_backward_fourier_real_1d", BackwardFourierReal1D);
+  m.def("naive_backward_fourier_complex_1d", BackwardFourierComplex1D);
+  m.def("fast_forward_fourier_real_1d", ForwardFourierReal1D);  // naive FT is parallelized anyway
+  m.def("fast_forward_fourier_complex_1d", ForwardFourierComplex1D);
+  m.def("fast_backward_fourier_real_1d", BackwardFourierReal1D);
+  m.def("fast_backward_fourier_complex_1d", BackwardFourierComplex1D);
 
   m.def("reduce_max", ReduceMax);
   m.def("reduce_sum", ReduceSum);

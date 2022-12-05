@@ -479,7 +479,6 @@ class Stack(TensorOp):
         return stacked
         ### END YOUR SOLUTION
 
-
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
         return split(out_grad, self.axis),
@@ -639,25 +638,53 @@ def conv(a, b, stride=1, padding=1):
     return Conv(stride, padding)(a, b)
 
 
-class ForwardFourier1D(TensorOp):
-    def compute(self, x):
-        return array_api.forward_fourier_1d(x.compact())
+class ForwardFourierReal1D(TensorTupleOp):
+    def compute(self, real):
+        return array_api.forward_fourier_1d(real)
 
     def gradient(self, out_grad, node):
-        return backward_fourier_1d(node) * out_grad,
+        out_grad_real, out_grad_imag = tuple_get_item(out_grad, 0), tuple_get_item(out_grad, 1)
+        return backward_fourier_complex_1d(out_grad_real, out_grad_imag)
 
 
-def forward_fourier_1d(x):
-    return ForwardFourier1D()(x)
+def forward_fourier_real_1d(real):
+    return ForwardFourierReal1D()(real)
 
 
-class BackwardFourier1D(TensorOp):
-    def compute(self, x):
-        return array_api.backward_fourier_1d(x.compact())
+class ForwardFourierComplex1D(TensorTupleOp):
+    def compute(self, real, imag):
+        return array_api.forward_fourier_1d(real, imag)
 
     def gradient(self, out_grad, node):
-        return forward_fourier_1d(node) * out_grad,
+        out_grad_real, out_grad_imag = tuple_get_item(out_grad, 0), tuple_get_item(out_grad, 1)
+        return backward_fourier_complex_1d(out_grad_real, out_grad_imag)
 
 
-def backward_fourier_1d(x):
-    return BackwardFourier1D()(x)
+def forward_fourier_complex_1d(real, imag):
+    return ForwardFourierComplex1D()(real, imag)
+
+
+class BackwardFourierReal1D(TensorTupleOp):
+    def compute(self, real):
+        return array_api.backward_fourier_1d(real)
+
+    def gradient(self, out_grad, node):
+        out_grad_real, out_grad_imag = tuple_get_item(out_grad, 0), tuple_get_item(out_grad, 1)
+        return forward_fourier_complex_1d(out_grad_real, out_grad_imag)
+
+
+def backward_fourier_real_1d(real):
+    return BackwardFourierReal1D()(real)
+
+
+class BackwardFourierComplex1D(TensorTupleOp):
+    def compute(self, real, imag):
+        return array_api.backward_fourier_1d(real, imag)
+
+    def gradient(self, out_grad, node):
+        out_grad_real, out_grad_imag = tuple_get_item(out_grad, 0), tuple_get_item(out_grad, 1)
+        return forward_fourier_complex_1d(out_grad_real, out_grad_imag)
+
+
+def backward_fourier_complex_1d(real, imag):
+    return BackwardFourierComplex1D()(real, imag)

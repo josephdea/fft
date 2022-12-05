@@ -383,7 +383,7 @@ void MatmulTiled(const AlignedArray& a, const AlignedArray& b, AlignedArray* out
   /// END YOUR SOLUTION
 }
 
-void NaiveForwardFourier1D(const AlignedArray& a, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
+void NaiveForwardFourierReal1D(const AlignedArray& a, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
   for (size_t k = 0; k < n; ++k) {
     std::complex<double> c;
     for (size_t j = 0; j < n; ++j) {
@@ -395,12 +395,36 @@ void NaiveForwardFourier1D(const AlignedArray& a, AlignedArray* out_real, Aligne
   }
 }
 
-void NaiveBackwardFourier1D(const AlignedArray& a, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
+void NaiveForwardFourierComplex1D(const AlignedArray& a_real, const AlignedArray& a_imag, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
+  for (size_t k = 0; k < n; ++k) {
+    std::complex<double> c;
+    for (size_t j = 0; j < n; ++j) {
+      auto theta = std::complex<double>(0, -2.0 * j * k * M_PI / n);
+      c += std::exp(theta) * std::complex<double>((a_real.ptr)[j], (a_imag.ptr)[j]);
+    }
+    (out_real->ptr)[k] = static_cast<float>(std::real(c));
+    (out_imag->ptr)[k] = static_cast<float>(std::imag(c));
+  }
+}
+
+void NaiveBackwardFourierReal1D(const AlignedArray& a, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
   for (size_t k = 0; k < n; ++k) {
     std::complex<double> c;
     for (size_t j = 0; j < n; ++j) {
       auto theta = std::complex<double>(0, 2.0 * j * k * M_PI / n);
       c += std::exp(theta) * static_cast<double>((a.ptr)[j]);
+    }
+    (out_real->ptr)[k] = static_cast<float>(std::real(c));
+    (out_imag->ptr)[k] = static_cast<float>(std::imag(c));
+  }
+}
+
+void NaiveBackwardFourierComplex1D(const AlignedArray& a_real, const AlignedArray& a_imag, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
+  for (size_t k = 0; k < n; ++k) {
+    std::complex<double> c;
+    for (size_t j = 0; j < n; ++j) {
+      auto theta = std::complex<double>(0, 2.0 * j * k * M_PI / n);
+      c += std::exp(theta) * std::complex<double>((a_real.ptr)[j], (a_imag.ptr)[j]);
     }
     (out_real->ptr)[k] = static_cast<float>(std::real(c));
     (out_imag->ptr)[k] = static_cast<float>(std::imag(c));
@@ -499,8 +523,10 @@ PYBIND11_MODULE(ndarray_backend_cpu, m) {
   m.def("matmul", Matmul);
   m.def("matmul_tiled", MatmulTiled);
 
-  m.def("naive_forward_fourier_1d", NaiveForwardFourier1D);
-  m.def("naive_backward_fourier_1d", NaiveBackwardFourier1D);
+  m.def("naive_forward_fourier_real_1d", NaiveForwardFourierReal1D);
+  m.def("naive_forward_fourier_complex_1d", NaiveForwardFourierComplex1D);
+  m.def("naive_backward_fourier_real_1d", NaiveBackwardFourierReal1D);
+  m.def("naive_backward_fourier_complex_1d", NaiveBackwardFourierComplex1D);
 
   m.def("reduce_max", ReduceMax);
   m.def("reduce_sum", ReduceSum);

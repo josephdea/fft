@@ -738,8 +738,30 @@ def squeeze(a, axis):
         new_shape = (1,)
     return a.reshape(new_shape)
 
-def forward_fourier_1d(a):
-    return a.naive_forward_fourier_1d()
+def _fourier_1d(real, imag, method, is_forward):
+    assert len(real.shape) == 1
+    assert method == 'naive' or method == 'fast'
+    if imag is not None:
+        assert real.device == imag.device
+        assert real.shape == imag.shape
+    device = real.device
+    fn_name = '{}_{}_fourier_{}_1d'.format(method,
+                                           'forward' if is_forward else 'backward',
+                                           'real' if imag is None else 'complex')
+    real_out = device.full(real.shape, 0, 'float32')
+    imag_out = device.full(real.shape, 0, 'float32')
 
-def backward_fourier_1d(a):
-    return a.naive_backward_fourier_1d()
+    args = [real.compact()._handle]
+    if imag is not None:
+        args.append(imag.compact()._handle)
+    args += [real_out._handle, imag_out._handle, real.shape[0]]
+
+    fn = getattr(device, fn_name)
+    fn(*args)
+    return real_out, imag_out
+
+def forward_fourier_1d(real, imag=None):
+    return _fourier_1d(real, imag, 'naive', True)
+
+def backward_fourier_1d(real, imag):
+    return _fourier_1d(real, imag, 'naive', False)
