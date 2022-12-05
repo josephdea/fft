@@ -403,25 +403,21 @@ void Matmul(const CudaArray& a, const CudaArray& b, CudaArray* out, uint32_t M, 
 
 __global__ void ForwardFourier1DKernel(const scalar_t* a_real, const scalar_t* a_imag, scalar_t* out_real, scalar_t* out_imag,
                                        uint32_t n) {
-  /*
   size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
   
   size_t j = gid % n;
   size_t k = gid / n;
   if (k < n && j < n) {
     cuDoubleComplex c;
-    auto a_j = make_cuDoubleComplex(a[j], 0.0);
+    double a_real_j = a_real[j];
+    double a_imag_j = ((a_imag != nullptr) ? a_imag[j] : 0.0);
     double theta = -2.0 * j * k / n;
     sincospi(theta, &(c.y), &(c.x));
-    c = cuCmul(c, a_j);
-    printf("%lu %lu %f %f\n", j, k, c.x, c.y);
-    __syncthreads();
-    out_real[k] += __double2float_rn(c.x);
-    out_imag[k] += __double2float_rn(c.y);
-    __syncthreads();
+    atomicAdd(&(out_real[k]), __double2float_rn(c.x * a_real_j - c.y * a_imag_j));
+    atomicAdd(&(out_imag[k]), __double2float_rn(c.x * a_imag_j + c.y * a_real_j));
   }
-  */
 
+  /*
   size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (gid < n) {
@@ -441,6 +437,7 @@ __global__ void ForwardFourier1DKernel(const scalar_t* a_real, const scalar_t* a
     out_real[gid] = __double2float_rn(real);
     out_imag[gid] = __double2float_rn(imag);
   }
+  */
 }
 
 void ForwardFourierReal1D(const CudaArray& a, CudaArray* out_real, CudaArray* out_imag, uint32_t n) {
@@ -457,6 +454,21 @@ void ForwardFourierComplex1D(const CudaArray& a_real, const CudaArray& a_imag, C
 
 __global__ void BackwardFourier1DKernel(const scalar_t* a_real, const scalar_t* a_imag, scalar_t* out_real, scalar_t* out_imag,
                                         uint32_t n) {
+  size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+  
+  size_t j = gid % n;
+  size_t k = gid / n;
+  if (k < n && j < n) {
+    cuDoubleComplex c;
+    double a_real_j = a_real[j];
+    double a_imag_j = ((a_imag != nullptr) ? a_imag[j] : 0.0);
+    double theta = 2.0 * j * k / n;
+    sincospi(theta, &(c.y), &(c.x));
+    atomicAdd(&(out_real[k]), __double2float_rn(c.x * a_real_j - c.y * a_imag_j));
+    atomicAdd(&(out_imag[k]), __double2float_rn(c.x * a_imag_j + c.y * a_real_j));
+  }
+
+  /*
   size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (gid < n) {
@@ -476,6 +488,7 @@ __global__ void BackwardFourier1DKernel(const scalar_t* a_real, const scalar_t* 
     out_real[gid] = __double2float_rn(real);
     out_imag[gid] = __double2float_rn(imag);
   }
+  */
 }
 
 void BackwardFourierReal1D(const CudaArray& a, CudaArray* out_real, CudaArray* out_imag, uint32_t n) {
