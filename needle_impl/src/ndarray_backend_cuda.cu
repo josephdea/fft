@@ -441,14 +441,14 @@ __global__ void ForwardFourier1DKernel(const scalar_t* a_real, const scalar_t* a
 }
 
 void ForwardFourierReal1D(const CudaArray& a, CudaArray* out_real, CudaArray* out_imag, uint32_t n) {
-  // CudaDims dim = CudaOneDim(n * n);
-  CudaDims dim = CudaOneDim(n);
+  CudaDims dim = CudaOneDim(n * n);
+  // CudaDims dim = CudaOneDim(n);
   ForwardFourier1DKernel<<<dim.grid, dim.block>>>(a.ptr, nullptr, out_real->ptr, out_imag->ptr, n);
 }
 
 void ForwardFourierComplex1D(const CudaArray& a_real, const CudaArray& a_imag, CudaArray* out_real, CudaArray* out_imag, uint32_t n) {
-  // CudaDims dim = CudaOneDim(n * n);
-  CudaDims dim = CudaOneDim(n);
+  CudaDims dim = CudaOneDim(n * n);
+  // CudaDims dim = CudaOneDim(n);
   ForwardFourier1DKernel<<<dim.grid, dim.block>>>(a_real.ptr, a_imag.ptr, out_real->ptr, out_imag->ptr, n);
 }
 

@@ -19,7 +19,6 @@ namespace cpu {
 typedef float scalar_t;
 const size_t ELEM_SIZE = sizeof(scalar_t);
 
-
 /**
  * This is a utility structure for maintaining an array aligned to ALIGNMENT boundaries in
  * memory.  This alignment should be at least TILE * ELEM_SIZE, though we make it even larger
@@ -37,8 +36,6 @@ struct AlignedArray {
   size_t size;
 };
 
-
-
 void Fill(AlignedArray* out, scalar_t val) {
   /**
    * Fill the values of an aligned array with val
@@ -47,9 +44,6 @@ void Fill(AlignedArray* out, scalar_t val) {
     out->ptr[i] = val;
   }
 }
-
-
-
 
 void Compact(const AlignedArray& a, AlignedArray* out, std::vector<int32_t> shape,
              std::vector<int32_t> strides, size_t offset) {
@@ -383,52 +377,49 @@ void MatmulTiled(const AlignedArray& a, const AlignedArray& b, AlignedArray* out
   /// END YOUR SOLUTION
 }
 
-void NaiveForwardFourierReal1D(const AlignedArray& a, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
+void NaiveFourier1D(const AlignedArray* a_real_ptr, const AlignedArray* a_imag_ptr, AlignedArray* out_real, AlignedArray* out_imag, size_t n, bool forward) {
+  const double forward_factor = (forward ? -1.0 : 1.0);
   for (size_t k = 0; k < n; ++k) {
     std::complex<double> c;
     for (size_t j = 0; j < n; ++j) {
-      auto theta = std::complex<double>(0, -2.0 * j * k * M_PI / n);
-      c += std::exp(theta) * static_cast<double>((a.ptr)[j]);
+      auto theta = std::complex<double>(0, forward_factor * 2.0 * j * k * M_PI / n);
+      c += std::exp(theta) * std::complex<double>((a_real_ptr->ptr)[j], (a_imag_ptr == nullptr ? 0.0 : (a_imag_ptr->ptr)[j]));
     }
     (out_real->ptr)[k] = static_cast<float>(std::real(c));
     (out_imag->ptr)[k] = static_cast<float>(std::imag(c));
   }
+}
+
+void NaiveForwardFourierReal1D(const AlignedArray& a, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
+  NaiveFourier1D(&a, nullptr, out_real, out_imag, n, true);
 }
 
 void NaiveForwardFourierComplex1D(const AlignedArray& a_real, const AlignedArray& a_imag, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
-  for (size_t k = 0; k < n; ++k) {
-    std::complex<double> c;
-    for (size_t j = 0; j < n; ++j) {
-      auto theta = std::complex<double>(0, -2.0 * j * k * M_PI / n);
-      c += std::exp(theta) * std::complex<double>((a_real.ptr)[j], (a_imag.ptr)[j]);
-    }
-    (out_real->ptr)[k] = static_cast<float>(std::real(c));
-    (out_imag->ptr)[k] = static_cast<float>(std::imag(c));
-  }
+  NaiveFourier1D(&a_real, &a_imag, out_real, out_imag, n, true);
 }
 
 void NaiveBackwardFourierReal1D(const AlignedArray& a, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
-  for (size_t k = 0; k < n; ++k) {
-    std::complex<double> c;
-    for (size_t j = 0; j < n; ++j) {
-      auto theta = std::complex<double>(0, 2.0 * j * k * M_PI / n);
-      c += std::exp(theta) * static_cast<double>((a.ptr)[j]);
-    }
-    (out_real->ptr)[k] = static_cast<float>(std::real(c));
-    (out_imag->ptr)[k] = static_cast<float>(std::imag(c));
-  }
+  NaiveFourier1D(&a, nullptr, out_real, out_imag, n, false);
 }
 
 void NaiveBackwardFourierComplex1D(const AlignedArray& a_real, const AlignedArray& a_imag, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
-  for (size_t k = 0; k < n; ++k) {
-    std::complex<double> c;
-    for (size_t j = 0; j < n; ++j) {
-      auto theta = std::complex<double>(0, 2.0 * j * k * M_PI / n);
-      c += std::exp(theta) * std::complex<double>((a_real.ptr)[j], (a_imag.ptr)[j]);
-    }
-    (out_real->ptr)[k] = static_cast<float>(std::real(c));
-    (out_imag->ptr)[k] = static_cast<float>(std::imag(c));
-  }
+  NaiveFourier1D(&a_real, &a_imag, out_real, out_imag, n, false);
+}
+
+void FastForwardFourierReal1D(const AlignedArray& a, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
+  NaiveFourier1D(&a, nullptr, out_real, out_imag, n, true);
+}
+
+void FastForwardFourierComplex1D(const AlignedArray& a_real, const AlignedArray& a_imag, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
+  NaiveFourier1D(&a_real, &a_imag, out_real, out_imag, n, true);
+}
+
+void FastBackwardFourierReal1D(const AlignedArray& a, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
+  NaiveFourier1D(&a, nullptr, out_real, out_imag, n, false);
+}
+
+void FastBackwardFourierComplex1D(const AlignedArray& a_real, const AlignedArray& a_imag, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
+  NaiveFourier1D(&a_real, &a_imag, out_real, out_imag, n, false);
 }
 
 void ReduceMax(const AlignedArray& a, AlignedArray* out, size_t reduce_size) {
@@ -527,6 +518,10 @@ PYBIND11_MODULE(ndarray_backend_cpu, m) {
   m.def("naive_forward_fourier_complex_1d", NaiveForwardFourierComplex1D);
   m.def("naive_backward_fourier_real_1d", NaiveBackwardFourierReal1D);
   m.def("naive_backward_fourier_complex_1d", NaiveBackwardFourierComplex1D);
+  m.def("fast_forward_fourier_real_1d", FastForwardFourierReal1D);
+  m.def("fast_forward_fourier_complex_1d", FastForwardFourierComplex1D);
+  m.def("fast_backward_fourier_real_1d", FastBackwardFourierReal1D);
+  m.def("fast_backward_fourier_complex_1d", FastBackwardFourierComplex1D);
 
   m.def("reduce_max", ReduceMax);
   m.def("reduce_sum", ReduceSum);
