@@ -605,7 +605,7 @@ def undilate(a, axes, dilation):
     return UnDilate(axes, dilation)(a)
 
 
-class Conv(TensorOp):
+class BasicConv(TensorOp):
     def __init__(self, stride: Optional[int] = 1, padding: Optional[int] = 0):
         self.stride = stride
         self.padding = padding
@@ -634,8 +634,39 @@ class Conv(TensorOp):
         ### END YOUR SOLUTION
 
 
-def conv(a, b, stride=1, padding=1):
-    return Conv(stride, padding)(a, b)
+class FFTConv(TensorOp):
+    def __init__(self, stride, padding):
+        self.stride = stride
+        self.padding = padding
+
+    def compute(self, Z, weight):
+        Z = Z.pad(((0, 0), (self.padding, self.padding), (self.padding, self.padding), (0, 0)))
+        Z_real, Z_imag = forward_fourier_real_2d(Z)
+
+    def gradient(self, out_grad, node):
+        ### BEGIN YOUR SOLUTION
+        Z, weight = node.inputs
+        dZ = conv(dilate(out_grad, (1, 2), self.stride - 1), transpose(flip(weight, (0, 1)), (2, 3)), padding=weight.shape[0] - self.padding - 1, method='fft')
+        dw = transpose(transpose(conv(transpose(Z, (0, 3)), transpose(transpose(dilate(out_grad, (1, 2), self.stride - 1), (0, 1)), (1, 2)), padding=self.padding, method='fft'), (0, 1)), (1, 2))
+        return dZ, dw
+        ### END YOUR SOLUTION
+
+
+def conv2d(a, b, stride=1, padding=0, method='basic'):
+    assert method == 'basic' or method == 'fft'
+    if method == 'basic':
+        return BasicConv(stride, padding)(a, b)
+    return FFTConv(stride, padding)(a, b)
+
+
+conv = conv2d
+
+
+def conv1d(a, b, stride=1, padding=0, method='basic'):
+    assert len(a.shape) == len(b.shape) == 1
+    a_reshape = reshape(a, (a.shape[0], 1))
+    b_reshape = reshape(b, (b.shape[0], 1))
+    return conv2d(a, b, stride, padding, method)
 
 
 class ForwardFourierReal1D(TensorTupleOp):
@@ -644,7 +675,7 @@ class ForwardFourierReal1D(TensorTupleOp):
 
     def gradient(self, out_grad, node):
         out_grad_real, out_grad_imag = tuple_get_item(out_grad, 0), tuple_get_item(out_grad, 1)
-        return backward_fourier_complex_1d(out_grad_real, out_grad_imag)
+        return backward_fourier_complex_1d(out_grad_real, out_grad_imag, divide_by_size=False)
 
 
 def forward_fourier_real_1d(real):
@@ -657,7 +688,7 @@ class ForwardFourierComplex1D(TensorTupleOp):
 
     def gradient(self, out_grad, node):
         out_grad_real, out_grad_imag = tuple_get_item(out_grad, 0), tuple_get_item(out_grad, 1)
-        return backward_fourier_complex_1d(out_grad_real, out_grad_imag)
+        return backward_fourier_complex_1d(out_grad_real, out_grad_imag, divide_by_size=False)
 
 
 def forward_fourier_complex_1d(real, imag):
@@ -665,26 +696,44 @@ def forward_fourier_complex_1d(real, imag):
 
 
 class BackwardFourierReal1D(TensorTupleOp):
+    def __init__(self, divide_by_size=True):
+        self.divide_by_size = divide_by_size
+
     def compute(self, real):
-        return array_api.backward_fourier_1d(real)
+        result = array_api.backward_fourier_1d(real)
+        if self.divide_by_size:
+            return result[0] / real.shape[0], result[1] / real.shape[0]
+        return result
 
     def gradient(self, out_grad, node):
         out_grad_real, out_grad_imag = tuple_get_item(out_grad, 0), tuple_get_item(out_grad, 1)
-        return forward_fourier_complex_1d(out_grad_real, out_grad_imag)
+        result = forward_fourier_complex_1d(out_grad_real, out_grad_imag)
+        if self.divide_by_size:
+            return result[0] / out_grad_real.shape[0], result[1] / out_grad_real.shape[0]
+        return result
 
 
-def backward_fourier_real_1d(real):
-    return BackwardFourierReal1D()(real)
+def backward_fourier_real_1d(real, divide_by_size=True):
+    return BackwardFourierReal1D(divide_by_size)(real)
 
 
 class BackwardFourierComplex1D(TensorTupleOp):
+    def __init__(self, divide_by_size=True):
+        self.divide_by_size = divide_by_size
+
     def compute(self, real, imag):
-        return array_api.backward_fourier_1d(real, imag)
+        result = array_api.backward_fourier_1d(real, imag)
+        if self.divide_by_size:
+            return result[0] / real.shape[0], result[1] / real.shape[0]
+        return result
 
     def gradient(self, out_grad, node):
         out_grad_real, out_grad_imag = tuple_get_item(out_grad, 0), tuple_get_item(out_grad, 1)
-        return forward_fourier_complex_1d(out_grad_real, out_grad_imag)
+        result = forward_fourier_complex_1d(out_grad_real, out_grad_imag)
+        if self.divide_by_size:
+            return result[0] / out_grad_real.shape[0], result[1] / out_grad_real.shape[0]
+        return result
 
 
-def backward_fourier_complex_1d(real, imag):
-    return BackwardFourierComplex1D()(real, imag)
+def backward_fourier_complex_1d(real, imag, divide_by_size=True):
+    return BackwardFourierComplex1D(divide_by_size)(real, imag)

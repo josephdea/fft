@@ -406,20 +406,70 @@ void NaiveBackwardFourierComplex1D(const AlignedArray& a_real, const AlignedArra
   NaiveFourier1D(&a_real, &a_imag, out_real, out_imag, n, false);
 }
 
+std::vector<std::complex<double>> FastFourier1DAux(std::vector<std::complex<double>>& x) {
+  if (x.size() == 1) {
+    return x;
+  }
+
+  using cvector = std::vector<std::complex<double>>;
+  const size_t x_size = x.size();
+  cvector x_even(x_size / 2);
+  cvector x_odd(x_size / 2);
+  cvector res(x_size);
+
+  for (size_t i = 0; i < x_size / 2; ++i) {
+    x_even[i] = x[2 * i];
+    x_odd[i] = x[2 * i + 1];
+  }
+
+  x_even = std::move(FastFourier1DAux(x_even));
+  x_odd = std::move(FastFourier1DAux(x_odd));
+
+  for (size_t i = 0; i < x_size / 2; ++i) {
+    auto factor = std::exp(std::complex<double>(0, -2.0 * M_PI * i / x_size));
+    res[i] = x_even[i] + factor * x_odd[i];
+    res[i + x_size / 2] = x_even[i] - factor * x_odd[i];
+  }
+
+  return res;
+}
+
+void FastFourier1D(const AlignedArray* a_real_ptr, const AlignedArray* a_imag_ptr, AlignedArray* out_real, AlignedArray* out_imag, size_t n, bool forward) {
+  std::vector<std::complex<double>> x(n);
+
+  const double forward_factor = (forward ? 1.0 : -1.0);
+  for (size_t i = 0; i < n; ++i) {
+    x[i] = std::complex<double>((a_real_ptr->ptr)[i], (a_imag_ptr == nullptr ? 0.0 : (forward_factor * (a_imag_ptr->ptr)[i])));
+  }
+
+  x = std::move(FastFourier1DAux(x));
+
+  if (!forward) {
+    for (auto& v : x) {
+      v = std::conj(v);
+    }
+  }
+
+  for (size_t i = 0; i < n; ++i) {
+    (out_real->ptr)[i] = std::real(x[i]);
+    (out_imag->ptr)[i] = std::imag(x[i]);
+  }
+}
+
 void FastForwardFourierReal1D(const AlignedArray& a, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
-  NaiveFourier1D(&a, nullptr, out_real, out_imag, n, true);
+  FastFourier1D(&a, nullptr, out_real, out_imag, n, true);
 }
 
 void FastForwardFourierComplex1D(const AlignedArray& a_real, const AlignedArray& a_imag, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
-  NaiveFourier1D(&a_real, &a_imag, out_real, out_imag, n, true);
+  FastFourier1D(&a_real, &a_imag, out_real, out_imag, n, true);
 }
 
 void FastBackwardFourierReal1D(const AlignedArray& a, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
-  NaiveFourier1D(&a, nullptr, out_real, out_imag, n, false);
+  FastFourier1D(&a, nullptr, out_real, out_imag, n, false);
 }
 
 void FastBackwardFourierComplex1D(const AlignedArray& a_real, const AlignedArray& a_imag, AlignedArray* out_real, AlignedArray* out_imag, size_t n) {
-  NaiveFourier1D(&a_real, &a_imag, out_real, out_imag, n, false);
+  FastFourier1D(&a_real, &a_imag, out_real, out_imag, n, false);
 }
 
 void ReduceMax(const AlignedArray& a, AlignedArray* out, size_t reduce_size) {
