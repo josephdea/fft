@@ -342,6 +342,16 @@ class IFFT1D(Module):
         return ops.backward_fourier_real_1d(x)
 
 
+class FFT2D(Module):
+    def forward(self, x):
+        return ops.forward_fourier_real_2d(x)
+
+
+class IFFT2D(Module):
+    def forward(self, x):
+        return ops.backward_fourier_real_2d(x)
+
+
 class RNNCell(Module):
     def __init__(self, input_size, hidden_size, bias=True, nonlinearity='tanh', device=None, dtype="float32"):
         """

@@ -739,28 +739,64 @@ def squeeze(a, axis):
     return a.reshape(new_shape)
 
 def _fourier_1d(real, imag, is_forward):
-    assert len(real.shape) == 1
-    assert real.shape[0] > 0
     if imag is not None:
         assert real.device == imag.device
         assert real.shape == imag.shape
 
-    size = real.shape[0]
+    real_shape = real.shape
+    size = real_shape[-1]
     method = 'fast' if size & (size - 1) == 0 else 'naive'
     device = real.device
     fn_name = '{}_{}_fourier_{}_1d'.format(method,
                                            'forward' if is_forward else 'backward',
                                            'real' if imag is None else 'complex')
-    real_out = device.full(real.shape, 0, 'float32')
-    imag_out = device.full(real.shape, 0, 'float32')
-
-    args = [real.compact()._handle]
-    if imag is not None:
-        args.append(imag.compact()._handle)
-    args += [real_out._handle, imag_out._handle, size]
-
     fn = getattr(device, fn_name)
-    fn(*args)
+
+    def _fourier_1d_slice(slice_real, slice_imag):
+        # when real.ndim == 1 is guaranteed
+        # called as a subroutine for batch FT
+
+        slice_real_out = device.full(slice_real.shape, 0, 'float32')
+        slice_imag_out = device.full(slice_real.shape, 0, 'float32')
+
+        args = [slice_real.compact()._handle]
+        if slice_imag is not None:
+            args.append(slice_imag.compact()._handle)
+        args += [slice_real_out._handle, slice_imag_out._handle, size]
+        fn(*args)
+
+        return slice_real_out, slice_imag_out
+
+    if len(real_shape) == 1:
+        return _fourier_1d_slice(real, imag)
+
+    # batch fourier
+    real_out = device.empty(real_shape, 'float32')
+    imag_out = device.empty(real_shape, 'float32')
+
+    counter = [0] * (len(real_shape) - 1)
+    loop = True
+    expanded_shape = (1,) * len(counter) + (size,)
+
+    while loop:
+        one_dim_real_slice = real[(*counter, slice(None, None))].reshape((size,)).compact()
+        if imag is not None:
+            one_dim_imag_slice = imag[(*counter, slice(None, None))].reshape((size,)).compact()
+        else:
+            one_dim_imag_slice = None
+        slice_ft_real, slice_ft_imag = _fourier_1d_slice(one_dim_real_slice, one_dim_imag_slice)
+
+        real_out[(*counter, slice(None, None))] = slice_ft_real.reshape(expanded_shape).compact()
+        imag_out[(*counter, slice(None, None))] = slice_ft_imag.reshape(expanded_shape).compact()
+
+        for i in range(len(real_shape) - 2, -1, -1):
+            counter[i] += 1
+            if counter[i] < real_shape[i]:
+                break
+            if i == 0:
+                loop = False
+            counter[i] = 0
+
     return real_out, imag_out
 
 def forward_fourier_1d(real, imag=None):
@@ -768,3 +804,20 @@ def forward_fourier_1d(real, imag=None):
 
 def backward_fourier_1d(real, imag=None):
     return _fourier_1d(real, imag, False)
+
+def _fourier_2d(real, imag, is_forward):
+    permute_arg = list(range(len(real.shape)))
+    permute_arg[-1], permute_arg[-2] = permute_arg[-2], permute_arg[-1]
+
+    real, imag = _fourier_1d(real, imag, is_forward)
+    real = real.permute(permute_arg).compact()
+    imag = imag.permute(permute_arg).compact()
+    real, imag = _fourier_1d(real, imag, is_forward)
+    
+    return real.permute(permute_arg).compact(), imag.permute(permute_arg).compact()
+
+def forward_fourier_2d(real, imag=None):
+    return _fourier_2d(real, imag, True)
+
+def backward_fourier_2d(real, imag=None):
+    return _fourier_2d(real, imag, False)
