@@ -801,14 +801,16 @@ class BackwardFourierReal2D(TensorTupleOp):
     def compute(self, real):
         result = array_api.backward_fourier_2d(real)
         if self.divide_by_size:
-            return result[0] / real.shape[-1], result[1] / real.shape[-1]
+            div_factor = real.shape[-1] * real.shape[-2]
+            return result[0] / div_factor, result[1] / div_factor
         return result
 
     def gradient(self, out_grad, node):
         out_grad_real, out_grad_imag = tuple_get_item(out_grad, 0), tuple_get_item(out_grad, 1)
         result = forward_fourier_complex_2d(out_grad_real, out_grad_imag)
         if self.divide_by_size:
-            return result[0] / out_grad_real.shape[-1], result[1] / out_grad_real.shape[-1]
+            div_factor = out_grad_real.shape[-1] * out_grad_real.shape[-2]
+            return result[0] / div_factor, result[1] / div_factor
         return result
 
 
@@ -823,14 +825,16 @@ class BackwardFourierComplex2D(TensorTupleOp):
     def compute(self, real, imag):
         result = array_api.backward_fourier_2d(real, imag)
         if self.divide_by_size:
-            return result[0] / real.shape[-1], result[1] / real.shape[-1]
+            div_factor = real.shape[-1] * real.shape[-2]
+            return result[0] / div_factor, result[1] / div_factor
         return result
 
     def gradient(self, out_grad, node):
         out_grad_real, out_grad_imag = tuple_get_item(out_grad, 0), tuple_get_item(out_grad, 1)
         result = forward_fourier_complex_2d(out_grad_real, out_grad_imag)
         if self.divide_by_size:
-            return result[0] / out_grad_real.shape[-1], result[1] / out_grad_real.shape[-1]
+            div_factor = out_grad_real.shape[-1] * out_grad_real.shape[-2]
+            return result[0] / div_factor, result[1] / div_factor
         return result
 
 
