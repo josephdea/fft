@@ -751,7 +751,7 @@ class BackwardFourierComplex1D(TensorTupleOp):
         self.divide_by_size = divide_by_size
 
     def compute(self, real, imag):
-        result = array_api.backward_fourier_1d(real)
+        result = array_api.backward_fourier_1d(real, imag)
         if self.divide_by_size:
             return result[0] / real.shape[-1], result[1] / real.shape[-1]
         return result
