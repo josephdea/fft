@@ -7,13 +7,11 @@ import time
 class MyModel(ndl.nn.Module):
     def __init__(self):
         super().__init__()
-        self.my_fft = ndl.nn.FFT1D()
+        self.my_fft = ndl.nn.FFT2D()
 
     def forward(self, x):
-        s = time.time()
         fftr, ffti = self.my_fft(x)
-        print(time.time() - s)
-        # print('my fft', fftr)
+        print('my fft', fftr, ffti)
         sums = ndl.ops.summation(fftr)
         # print('my sum', sums)
         return sums
@@ -24,11 +22,9 @@ class TorchModel(torch.nn.Module):
         super().__init__()
 
     def forward(self, x):
-        s = time.time()
-        fft = torch.fft.fft(x)
-        print(time.time() - s)
-        fft = torch.real(fft)
-        # print('torch fft', fft)
+        fft = torch.fft.fft2(x)
+        # fft = torch.real(fft)
+        print('torch fft', torch.real(fft), torch.imag(fft))
         sums = torch.sum(fft)
         # print('torch sums', sums)
         return sums
@@ -39,11 +35,24 @@ if __name__ == '__main__':
 
     # _batch_x = np.random.randn(3, 7, 5, 5).astype(np.float32)
     # _batch_y = np.array([0, 2, 1], dtype=np.float32)
-    _batch_x = np.random.randn(5000).astype(np.float32)
+    _batch_x = np.arange(3 * 5).reshape(3, 5) + 1 # np.random.randn(3, 7).astype(np.float32)
+
+    _batch_x_real = np.random.randn(3, 4)
+    _batch_x_imag = np.random.randn(3, 4)
+
     _batch_y = np.array([0.5], dtype=np.float32)
 
     batch_x = ndl.Tensor(_batch_x, device=ndl.cpu())
+    batch_x_real = ndl.Tensor(_batch_x_real, device=ndl.cpu())
+    batch_x_imag = ndl.Tensor(_batch_x_imag, device=ndl.cpu())
     batch_y = ndl.Tensor(_batch_y, device=ndl.cpu())
+
+
+    # print(ndl.ops.forward_fourier_complex_1d(batch_x_real, batch_x_imag))
+    # print(np.fft.fft(_batch_x_real + (_batch_x_imag * 1.0j)))
+
+    # import sys; sys.exit(0)
+
 
     my_model = MyModel()
     # my_loss = ndl.nn.SoftmaxLoss()
@@ -76,11 +85,8 @@ if __name__ == '__main__':
     torchs = torch_model(u)
     torchs.backward()
 
-    # print(mine)
-    # print(torchs)
-
-    # print(batch_x.grad.numpy())
-    # print(u.grad)
+    print(batch_x.grad.numpy())
+    print(u.grad)
 
     import sys; sys.exit(0)
 

@@ -219,7 +219,7 @@ class Transpose(TensorOp):
 
     def compute(self, a):
         ### BEGIN YOUR SOLUTION
-        return array_api.swapaxes(a, *self.axes)
+        return array_api.swapaxes(a, *self.axes).compact()
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
@@ -641,14 +641,19 @@ class FFTConv(TensorOp):
 
     def compute(self, Z, weight):
         # Z: (N, H, W, C_in), weight: (K, K, C_in, C_out)
+        Z = Z.pad(((0, 0), (self.padding, self.padding), (self.padding, self.padding), (0, 0)))
         N, H, W, C_in = Z.shape
         K, _, _, C_out = weight.shape
+        weight = weight.pad(((0, H - K), (0, W - K), (0, 0), (0, 0)))
 
-        Z = Z.pad(((0, 0), (self.padding, self.padding), (self.padding, self.padding), (0, 0)))
-        weight = weight.pad((0, H - K), (0, W - K), (0, 0), (0, 0))
+        # forward_fourier_real_2d applies FT to the last two dimensions, so permute
+        Z = Z.permute((0, 3, 1, 2)).compact()
+        Z_ft_real, Z_ft_imag = array_api.forward_fourier_2d(Z)
+        weight = weight.permute((2, 3, 0, 1)).compact()
+        weight_ft_real, weight_ft_imag = array_api.forward_fourier_2d(weight)
 
-        Z_ft_real, Z_ft_imag = forward_fourier_real_2d(Z, axes=(1, 2))
-        weight_ft_real, weight_ft_imag = forward_fourier_real_2d(weight, axes=(0, 1))
+        # Z_ft: (N, C_in, H, W)
+        # weight_ft: (C_in, C_out, H, W)
 
         # have to do weird things because our matmul accepts 2D arrays only
         result_real = array_api.empty((N, H, W, C_out), dtype=Z.dtype, device=Z.device)
@@ -656,21 +661,23 @@ class FFTConv(TensorOp):
 
         for h in range(H):
             for w in range(W):
-                weight_ft_real_hw = weight_ft_real[h, w].compact().reshape((C_in, C_out)).compact()
-                weight_ft_imag_hw = -(weight_ft_imag[h, w].compact().reshape((C_in, C_out)).compact())  # negate so that the kernel is flipped
+                weight_ft_real_hw = weight_ft_real[:, :, h, w].compact().reshape((C_in, C_out)).compact()
+                weight_ft_imag_hw = -(weight_ft_imag[:, :, h, w].compact().reshape((C_in, C_out)).compact())  # negate so that the kernel is flipped
 
                 for n in range(N):
-                    Z_ft_real_hw = Z_ft_real[n, h, w].compact().reshape((1, C_in)).compact()
-                    Z_ft_imag_hw = Z_ft_imag[n, h, w].compact().reshape((1, C_in)).compact()
+                    Z_ft_real_hw = Z_ft_real[n, :, h, w].compact().reshape((1, C_in)).compact()
+                    Z_ft_imag_hw = Z_ft_imag[n, :, h, w].compact().reshape((1, C_in)).compact()
 
                     result_real_hw = Z_ft_real_hw @ weight_ft_real_hw - Z_ft_imag_hw @ weight_ft_imag_hw
                     result_imag_hw = Z_ft_imag_hw @ weight_ft_real_hw + Z_ft_real_hw @ weight_ft_imag_hw
                     
-                    result_real[n, h, w] = result_real_hw.reshape((1, 1, 1, C_out)).compact()
-                    result_imag[n, h, w] = result_imag_hw.reshape((1, 1, 1, C_out)).compact()
+                    result_real[n, h, w, :] = result_real_hw.reshape((1, 1, 1, C_out)).compact()
+                    result_imag[n, h, w, :] = result_imag_hw.reshape((1, 1, 1, C_out)).compact()
         
-        conv_result, _ = backward_fourier_complex_2d(result_real, result_imag, axes=(1, 2))
-        return conv_result[None, slice(0, H - K + 1, self.stride), slice(0, W - K + 1, self.stride), None].compact()
+        result_real = result_real.permute((0, 3, 1, 2)).compact()
+        result_imag = result_imag.permute((0, 3, 1, 2)).compact()
+        conv_result, _ = array_api.backward_fourier_2d(result_real, result_imag)
+        return conv_result[:, :, 0:H - K + 1:self.stride, 0:W - K + 1:self.stride].compact().permute((0, 2, 3, 1)).compact() / (result_real.shape[-1] * result_real.shape[-2])
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
@@ -681,11 +688,11 @@ class FFTConv(TensorOp):
         ### END YOUR SOLUTION
 
 
-def conv2d(a, b, stride=1, padding=0, method='basic', channel_first=False):
+def conv2d(a, b, stride=1, padding=0, method='basic'):
     assert method == 'basic' or method == 'fft'
     if method == 'basic':
-        return BasicConv(stride, padding)(a, b, channel_first)
-    return FFTConv(stride, padding)(a, b, channel_first)
+        return BasicConv(stride, padding)(a, b)
+    return FFTConv(stride, padding)(a, b)
 
 
 conv = conv2d
