@@ -640,8 +640,37 @@ class FFTConv(TensorOp):
         self.padding = padding
 
     def compute(self, Z, weight):
+        # Z: (N, H, W, C_in), weight: (K, K, C_in, C_out)
+        N, H, W, C_in = Z.shape
+        K, _, _, C_out = weight.shape
+
         Z = Z.pad(((0, 0), (self.padding, self.padding), (self.padding, self.padding), (0, 0)))
-        Z_real, Z_imag = forward_fourier_real_2d(Z)
+        weight = weight.pad((0, H - K), (0, W - K), (0, 0), (0, 0))
+
+        Z_ft_real, Z_ft_imag = forward_fourier_real_2d(Z, axes=(1, 2))
+        weight_ft_real, weight_ft_imag = forward_fourier_real_2d(weight, axes=(0, 1))
+
+        # have to do weird things because our matmul accepts 2D arrays only
+        result_real = array_api.empty((N, H, W, C_out), dtype=Z.dtype, device=Z.device)
+        result_imag = array_api.empty((N, H, W, C_out), dtype=Z.dtype, device=Z.device)
+
+        for h in range(H):
+            for w in range(W):
+                weight_ft_real_hw = weight_ft_real[h, w].compact().reshape((C_in, C_out)).compact()
+                weight_ft_imag_hw = -(weight_ft_imag[h, w].compact().reshape((C_in, C_out)).compact())  # negate so that the kernel is flipped
+
+                for n in range(N):
+                    Z_ft_real_hw = Z_ft_real[n, h, w].compact().reshape((1, C_in)).compact()
+                    Z_ft_imag_hw = Z_ft_imag[n, h, w].compact().reshape((1, C_in)).compact()
+
+                    result_real_hw = Z_ft_real_hw @ weight_ft_real_hw - Z_ft_imag_hw @ weight_ft_imag_hw
+                    result_imag_hw = Z_ft_imag_hw @ weight_ft_real_hw + Z_ft_real_hw @ weight_ft_imag_hw
+                    
+                    result_real[n, h, w] = result_real_hw.reshape((1, 1, 1, C_out)).compact()
+                    result_imag[n, h, w] = result_imag_hw.reshape((1, 1, 1, C_out)).compact()
+        
+        conv_result, _ = backward_fourier_complex_2d(result_real, result_imag, axes=(1, 2))
+        return conv_result[None, slice(0, H - K + 1, self.stride), slice(0, W - K + 1, self.stride), None].compact()
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
@@ -652,21 +681,14 @@ class FFTConv(TensorOp):
         ### END YOUR SOLUTION
 
 
-def conv2d(a, b, stride=1, padding=0, method='basic'):
+def conv2d(a, b, stride=1, padding=0, method='basic', channel_first=False):
     assert method == 'basic' or method == 'fft'
     if method == 'basic':
-        return BasicConv(stride, padding)(a, b)
-    return FFTConv(stride, padding)(a, b)
+        return BasicConv(stride, padding)(a, b, channel_first)
+    return FFTConv(stride, padding)(a, b, channel_first)
 
 
 conv = conv2d
-
-
-def conv1d(a, b, stride=1, padding=0, method='basic'):
-    assert len(a.shape) == len(b.shape) == 1
-    a_reshape = reshape(a, (a.shape[0], 1))
-    b_reshape = reshape(b, (b.shape[0], 1))
-    return conv2d(a, b, stride, padding, method)
 
 
 class ForwardFourierReal1D(TensorTupleOp):
