@@ -284,7 +284,7 @@ class Conv(Module):
     """
     Multi-channel 2D convolutional layer
     IMPORTANT: Accepts inputs in NCHW format, outputs also in NCHW format
-    Only supports padding=same
+    Only supports padding=kernel_size // 2 (i.e., padding same when stride = 1)
     No grouped convolution or dilation
     Only supports square kernels
     """
@@ -317,17 +317,12 @@ class Conv(Module):
         x = ops.transpose(ops.transpose(x, (1, 2)), (2, 3))
         _, h, w, _ = x.shape
         assert h == w
-        # padding = math.ceil(((self.stride - 1) * h + self.kernel_size - self.stride) / 2)
-        # padding = ((self.stride - 1) * h + self.kernel_size) // 2
-        padding = self.kernel_size // 2  # ?????????????????
+        padding = self.kernel_size // 2  # to match needle
         convolved = ops.conv(x, self.weight, stride=self.stride, padding=padding)  # NHWC
         if self.bias is not None:
             bias = ops.broadcast_to(ops.reshape(self.bias, (1, 1, 1, self.out_channels)), convolved.shape)
             convolved += bias
         convolved = ops.transpose(ops.transpose(convolved, (2, 3)), (1, 2))  # NCHW
-        # if self.bias is not None:
-        #     bias = ops.broadcast_to(ops.reshape(self.bias, (1, self.out_channels, 1, 1)), convolved.shape)
-        #     convolved += bias
         return convolved
         ### END YOUR SOLUTION
 

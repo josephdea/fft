@@ -378,11 +378,22 @@ void MatmulTiled(const AlignedArray& a, const AlignedArray& b, AlignedArray* out
 }
 
 void NaiveFourier1D(const AlignedArray* a_real_ptr, const AlignedArray* a_imag_ptr, AlignedArray* out_real, AlignedArray* out_imag, size_t n, bool forward) {
+  /**
+   * Master function for naive 1D Fourier transform.
+   *
+   * Args:
+   *    a_real_ptr: pointer to the real part of the input
+   *    a_imag_ptr: pointer to the imaginary part of the input
+   *    out_real: pointer to the real part of the output
+   *    out_imag: pointer to the imaginary part of the output
+   *    n: size of the input (must be equal for all a_real_ptr, a_imag_ptr, out_real, out_imag)
+   *    forward: whether the forward Fourier transform should be computed
+   */
   const double forward_factor = (forward ? -1.0 : 1.0);
   for (size_t k = 0; k < n; ++k) {
     std::complex<double> c;
     for (size_t j = 0; j < n; ++j) {
-      auto theta = std::complex<double>(0, forward_factor * 2.0 * j * k * M_PI / n);
+      auto theta = std::complex<double>(0, forward_factor * 2.0 * j * k * M_PI / static_cast<double>(n));
       c += std::exp(theta) * std::complex<double>((a_real_ptr->ptr)[j], (a_imag_ptr == nullptr ? 0.0 : (a_imag_ptr->ptr)[j]));
     }
     (out_real->ptr)[k] = static_cast<float>(std::real(c));
@@ -407,6 +418,12 @@ void NaiveBackwardFourierComplex1D(const AlignedArray& a_real, const AlignedArra
 }
 
 std::vector<std::complex<double>> FastFourier1DAux(std::vector<std::complex<double>>& x) {
+  /**
+   * Auxiliary function that actually computes the 1D Fourier transform using FFT.
+   *
+   * Args:
+   *    x: input vector of complex numbers
+   */
   if (x.size() == 1) {
     return x;
   }
@@ -426,7 +443,7 @@ std::vector<std::complex<double>> FastFourier1DAux(std::vector<std::complex<doub
   x_odd = std::move(FastFourier1DAux(x_odd));
 
   for (size_t i = 0; i < x_size / 2; ++i) {
-    auto factor = std::exp(std::complex<double>(0, -2.0 * M_PI * i / x_size));
+    auto factor = std::exp(std::complex<double>(0, -2.0 * M_PI * i / static_cast<double>(x_size)));
     res[i] = x_even[i] + factor * x_odd[i];
     res[i + x_size / 2] = x_even[i] - factor * x_odd[i];
   }
@@ -435,6 +452,17 @@ std::vector<std::complex<double>> FastFourier1DAux(std::vector<std::complex<doub
 }
 
 void FastFourier1D(const AlignedArray* a_real_ptr, const AlignedArray* a_imag_ptr, AlignedArray* out_real, AlignedArray* out_imag, size_t n, bool forward) {
+  /**
+   * Master function for fast 1D Fourier transform.
+   *
+   * Args:
+   *    a_real_ptr: pointer to the real part of the input
+   *    a_imag_ptr: pointer to the imaginary part of the input
+   *    out_real: pointer to the real part of the output
+   *    out_imag: pointer to the imaginary part of the output
+   *    n: size of the input (must be equal for all a_real_ptr, a_imag_ptr, out_real, out_imag), must be a power of two (will not be checked by the function)
+   *    forward: whether the forward Fourier transform should be computed
+   */
   std::vector<std::complex<double>> x(n);
 
   const double forward_factor = (forward ? 1.0 : -1.0);

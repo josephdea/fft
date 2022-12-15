@@ -403,6 +403,16 @@ void Matmul(const CudaArray& a, const CudaArray& b, CudaArray* out, uint32_t M, 
 
 __global__ void ForwardFourier1DKernel(const scalar_t* a_real, const scalar_t* a_imag, scalar_t* out_real, scalar_t* out_imag,
                                        uint32_t n) {
+  /**
+   * Kernel for forward 1D Fourier transform. Assumes CudaOneDim with size n * n.
+   *
+   * Args:
+   *    a_real_ptr: pointer to the real part of the input
+   *    a_imag_ptr: pointer to the imaginary part of the input
+   *    out_real: pointer to the real part of the output
+   *    out_imag: pointer to the imaginary part of the output
+   *    n: size of the input (must be equal for all a_real_ptr, a_imag_ptr, out_real, out_imag)
+   */
   size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
   
   size_t j = gid % n;
@@ -430,6 +440,16 @@ void ForwardFourierComplex1D(const CudaArray& a_real, const CudaArray& a_imag, C
 
 __global__ void BackwardFourier1DKernel(const scalar_t* a_real, const scalar_t* a_imag, scalar_t* out_real, scalar_t* out_imag,
                                         uint32_t n) {
+  /**
+   * Kernel for backward 1D Fourier transform. Assumes CudaOneDim with size n * n.
+   *
+   * Args:
+   *    a_real_ptr: pointer to the real part of the input
+   *    a_imag_ptr: pointer to the imaginary part of the input
+   *    out_real: pointer to the real part of the output
+   *    out_imag: pointer to the imaginary part of the output
+   *    n: size of the input (must be equal for all a_real_ptr, a_imag_ptr, out_real, out_imag)
+   */
   size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
   
   size_t j = gid % n;

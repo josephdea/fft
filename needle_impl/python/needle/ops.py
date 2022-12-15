@@ -655,7 +655,7 @@ class FFTConv(TensorOp):
         # Z_ft: (N, C_in, H, W)
         # weight_ft: (C_in, C_out, H, W)
 
-        # have to do weird things because our matmul accepts 2D arrays only
+        # have to emulate batched matmul using Python loops because our matmul accepts 2D arrays only
         result_real = array_api.empty((N, H, W, C_out), dtype=Z.dtype, device=Z.device)
         result_imag = array_api.empty((N, H, W, C_out), dtype=Z.dtype, device=Z.device)
 
@@ -680,12 +680,10 @@ class FFTConv(TensorOp):
         return conv_result[:, :, 0:H - K + 1:self.stride, 0:W - K + 1:self.stride].compact().permute((0, 2, 3, 1)).compact() / (result_real.shape[-1] * result_real.shape[-2])
 
     def gradient(self, out_grad, node):
-        ### BEGIN YOUR SOLUTION
         Z, weight = node.inputs
         dZ = conv(dilate(out_grad, (1, 2), self.stride - 1), transpose(flip(weight, (0, 1)), (2, 3)), padding=weight.shape[0] - self.padding - 1, method='fft')
         dw = transpose(transpose(conv(transpose(Z, (0, 3)), transpose(transpose(dilate(out_grad, (1, 2), self.stride - 1), (0, 1)), (1, 2)), padding=self.padding, method='fft'), (0, 1)), (1, 2))
         return dZ, dw
-        ### END YOUR SOLUTION
 
 
 def conv2d(a, b, stride=1, padding=0, method='basic'):

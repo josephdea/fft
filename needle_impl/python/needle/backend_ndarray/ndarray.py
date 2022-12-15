@@ -739,6 +739,12 @@ def squeeze(a, axis):
     return a.reshape(new_shape)
 
 def _fourier_1d(real, imag, is_forward):
+    """
+    Master function for 1D Fourier transform. `is_forward` determines whether
+    to do a forward or backward Fourier transform (i.e., DFT or IDFT). Can
+    accept batched inputs -- applies Fourier transform to the last axis.
+    """
+
     if imag is not None:
         assert real.device == imag.device
         assert real.shape == imag.shape
@@ -753,6 +759,10 @@ def _fourier_1d(real, imag, is_forward):
     fn = getattr(device, fn_name)
 
     def _fourier_1d_slice(slice_real, slice_imag):
+        """
+        Actually invokes Fourier transform for a 1D slice. The `fn` variable
+        outside this closure determines which function is called.
+        """
         # when real.ndim == 1 is guaranteed
         # called as a subroutine for batch FT
 
@@ -806,6 +816,13 @@ def backward_fourier_1d(real, imag=None):
     return _fourier_1d(real, imag, False)
 
 def _fourier_2d(real, imag, is_forward):
+    """
+    Master function for 2D Fourier transform. `is_forward` determines whether
+    to do a forward or backward Fourier transform (i.e., DFT or IDFT). Can
+    accept batched inputs -- applies Fourier transform to the last two axes.
+    Calls 1D Fourier transform as a subroutine.
+    """
+
     permute_arg = list(range(len(real.shape)))
     permute_arg[-1], permute_arg[-2] = permute_arg[-2], permute_arg[-1]
 
